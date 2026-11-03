@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ghi chú của tôi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap&subset=vietnamese" rel="stylesheet">
+<style>
+  :root {
+    --desk: #5f6b73;
+    --paper: #f3d95f;
+    --paper-edge: #e3c744;
+    --ink: #1f1d1a;
+    --rule: rgba(31, 29, 26, .72);
+    --red: #b3261e;
+    --lh: 36px;
+    --pad-x: 28px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background: var(--desk);
+    color: var(--ink);
+    font-family: "Patrick Hand", "Segoe Print", "Comic Sans MS", cursive, sans-serif;
+    padding: 24px 16px 48px;
+    display: flex;
+    justify-content: center;
+  }
+  .wrap { width: 100%; max-width: 640px; }
+
+  /* Thanh công cụ: các tờ note */
+  .tray {
+    display: flex; align-items: center; gap: 8px;
+    overflow-x: auto; padding: 4px 2px 16px;
+    scrollbar-width: thin;
+  }
+  .chip {
+    flex: 0 0 auto; max-width: 150px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: #fff; background: rgba(255,255,255,.12);
+    border: 1px solid rgba(255,255,255,.32);
+    border-radius: 4px; padding: 4px 12px; font-size: 17px;
+  }
+  .chip:hover { background: rgba(255,255,255,.22); }
+  .chip.on { background: var(--paper); color: var(--ink); border-color: var(--paper-edge); }
+  .chip.new { border-style: dashed; }
+  .tray .sep { flex: 0 0 1px; align-self: stretch; background: rgba(255,255,255,.3); margin: 2px 4px; }
+
+  .note {
+    background: var(--paper);
+    box-shadow: 0 1px 0 var(--paper-edge) inset, 0 10px 24px rgba(0,0,0,.28), 0 2px 4px rgba(0,0,0,.2);
+    border-radius: 2px 2px 6px 2px;
+    position: relative;
+    padding-top: 14px;
+  }
+  .note::before { /* miếng băng dính */
+    content: "";
+    position: absolute; top: -12px; left: 50%;
+    width: 110px; height: 26px;
+    transform: translateX(-50%) rotate(-1.5deg);
+    background: rgba(230, 226, 214, .72);
+    box-shadow: 0 1px 2px rgba(0,0,0,.18);
+  }
+  .bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 6px var(--pad-x) 2px;
+  }
+  .bar h1 { font-size: 24px; font-weight: 400; margin: 0; }
+  .bar .tools { display: flex; align-items: center; gap: 10px; font-size: 16px; }
+  #status { opacity: .7; }
+  .meta { padding: 0 var(--pad-x) 8px; font-size: 16px; opacity: .8; }
+  .meta.warn { color: var(--red); opacity: 1; font-weight: 700; }
+
+  button {
+    font: inherit; font-size: 16px; color: var(--ink);
+    background: transparent; border: 1.5px solid var(--ink);
+    border-radius: 4px; padding: 2px 10px; cursor: pointer;
+  }
+  button:hover { background: rgba(31,29,26,.1); }
+  .chip { cursor: pointer; }
+  button.keep.on { background: var(--ink); color: var(--paper); }
+  button:focus-visible, textarea:focus-visible, #view:focus-visible {
+    outline: 2px solid var(--ink); outline-offset: 2px;
+  }
+  .tray button:focus-visible { outline-color: #fff; }
+
+  /* Vùng viết: dòng kẻ đen, mỗi dòng cao đúng --lh */
+  .sheet {
+    background-image: repeating-linear-gradient(
+      to bottom,
+      transparent 0, transparent calc(var(--lh) - 1.5px),
+      var(--rule) calc(var(--lh) - 1.5px), var(--rule) var(--lh)
+    );
+    min-height: 56vh;
+    position: relative;
+  }
+  #view, #edit {
+    display: block; width: 100%;
+    margin: 0; border: 0;
+    padding: 0 var(--pad-x);
+    font: inherit; font-size: 23px;
+    line-height: var(--lh);
+    white-space: pre-wrap; overflow-wrap: anywhere;
+    color: var(--ink);
+    min-height: 56vh;
+  }
+  #view { cursor: text; }
+  #edit { background: transparent; resize: none; overflow: hidden; outline-offset: -2px; }
+  #edit[hidden], #view[hidden] { display: none; }
+  .placeholder { opacity: .55; }
+
+  .num { color: var(--red); font-weight: 700; }
+  .ic { font-size: .9em; line-height: 1; margin-right: .12em; font-style: normal; }
+  .ic.alone { margin-right: 0; }
+
+  .legend {
+    margin: 18px 4px 0; color: #e8ebec; font-size: 16px; line-height: 1.7;
+    display: flex; flex-wrap: wrap; gap: 4px 18px;
+  }
+  .legend span b { color: #fff; font-weight: 400; background: rgba(0,0,0,.22); padding: 0 6px; border-radius: 3px; }
+  @media (max-width: 480px) {
+    :root { --pad-x: 18px; --lh: 34px; }
+    #view, #edit { font-size: 21px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="tray" id="tray" aria-label="Danh sách tờ note"></div>
+
+  <div class="note">
+    <div class="bar">
+      <h1>Ghi chú</h1>
+      <div class="tools">
+        <span id="status" aria-live="polite"></span>
+        <button id="keep" class="keep" type="button">Lưu</button>
+        <button id="del" type="button">Xoá</button>
+      </div>
+    </div>
+    <div class="meta" id="meta"></div>
+    <div class="sheet">
+      <div id="view" tabindex="0" role="textbox" aria-label="Ghi chú. Bấm để sửa."></div>
+      <textarea id="edit" hidden spellcheck="false" aria-label="Sửa ghi chú"></textarea>
+    </div>
+  </div>
+
+  <div class="legend" aria-label="Từ khoá nhận diện">
+    <span><b>⌛ 30 phút</b> thời gian</span>
+    <span><b class="num" style="color:#ffb4ab">12</b> số thường</span>
+    <span><b>🎥</b> quay phim, chụp ảnh</span>
+    <span><b>🎬</b> edit</span>
+    <span><b>💸</b> mua, trả tiền</span>
+    <span><b>📝</b> *</span>
+    <span><b>🗃️</b> file</span>
+  </div>
+</div>
+
+<script>
+(function () {
+  var KEY = "my-sticky-notes-v2";
+  var OLD_KEY = "my-sticky-note-v1";
+  var DAY = 24 * 60 * 60 * 1000;
+  var EXPIRE = 30 * DAY;
+
+  var tray = document.getElementById("tray");
+  var view = document.getElementById("view");
+  var edit = document.getElementById("edit");
+  var status = document.getElementById("status");
+  var keepBtn = document.getElementById("keep");
+  var delBtn = document.getElementById("del");
+  var meta = document.getElementById("meta");
+  var timer;
+
+  /* ---------- dữ liệu ---------- */
+  function uid() { return "n" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+  function makeNote(text) {
+    var t = Date.now();
+    return { id: uid(), text: text || "", saved: false, created: t, updated: t };
+  }
+
+  function loadState() {
+    var s = null;
+    try {
+      var raw = localStorage.getItem(KEY);
+      if (raw) s = JSON.parse(raw);
+    } catch (e) {}
+    if (!s || !Array.isArray(s.notes)) {
+      s = { notes: [], active: null };
+      try { // chuyển ghi chú cũ (bản 1 tờ) sang
+        var old = localStorage.getItem(OLD_KEY);
+        if (old && old.trim()) s.notes.push(makeNote(old));
+      } catch (e) {}
+    }
+    // xoá tờ chưa lưu quá 30 ngày
+    var t = Date.now();
+    s.notes = s.notes.filter(function (n) { return n.saved || t - n.updated < EXPIRE; });
+    if (s.notes.length === 0) s.notes.push(makeNote(""));
+    if (!s.notes.some(function (n) { return n.id === s.active; })) s.active = sorted(s.notes)[0].id;
+    return s;
+  }
+
+  function sorted(notes) {
+    return notes.slice().sort(function (a, b) {
+      if (a.saved !== b.saved) return a.saved ? -1 : 1;
+      return a.created - b.created;
+    });
+  }
+
+  var S = loadState();
+
+  function cur() {
+    for (var i = 0; i < S.notes.length; i++) if (S.notes[i].id === S.active) return S.notes[i];
+    return S.notes[0];
+  }
+
+  function persist(quiet) {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(S));
+      if (!quiet) {
+        status.textContent = "Đã ghi";
+        clearTimeout(timer);
+        timer = setTimeout(function () { status.textContent = ""; }, 1400);
+      }
+    } catch (e) {
+      status.textContent = "Không lưu được";
+    }
+  }
+
+  /* ---------- nhận diện từ khoá ---------- */
+  var L = "[\\p{L}\\p{N}]";
+  var pattern =
+    "(?<!" + L + ")(?:" +
+      "(\\d+(?:[.,]\\d+)?[ \\t]*(?:phút|phut|giờ|gio|tiếng|tieng|h\\d{0,2}))" +
+      "|(\\d+(?:[.,]\\d+)*)" +
+      "|(quay[ \\t]+phim|chụp[ \\t]+ảnh|chup[ \\t]+anh)" +
+      "|(edit)" +
+      "|(mua|trả[ \\t]+tiền|tra[ \\t]+tien)" +
+      "|(file)" +
+    ")(?!" + L + ")" +
+    "|(\\*)";
+  var RE = new RegExp(pattern, "giu");
+
+  function esc(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function render(text) {
+    var out = "", last = 0, m;
+    RE.lastIndex = 0;
+    while ((m = RE.exec(text)) !== null) {
+      if (m[0] === "") { RE.lastIndex++; continue; }
+      out += esc(text.slice(last, m.index));
+      var t = esc(m[0]);
+      if (m[1])      out += '<span class="num"><span class="ic">⌛</span>' + t + "</span>";
+      else if (m[2]) out += '<span class="num">' + t + "</span>";
+      else if (m[3]) out += '<span class="ic">🎥</span>' + t;
+      else if (m[4]) out += '<span class="ic">🎬</span>' + t;
+      else if (m[5]) out += '<span class="ic">💸</span>' + t;
+      else if (m[6]) out += '<span class="ic">🗃️</span>' + t;
+      else if (m[7]) out += '<span class="ic alone">📝</span>';
+      last = m.index + m[0].length;
+    }
+    return out + esc(text.slice(last));
+  }
+
+  /* ---------- giao diện ---------- */
+  function titleOf(n) {
+    var line = (n.text.split("\n").filter(function (l) { return l.trim(); })[0] || "").trim();
+    return line || "Note trống";
+  }
+
+  function renderTray() {
+    tray.innerHTML = "";
+    var list = sorted(S.notes), sepDone = false;
+    list.forEach(function (n, i) {
+      if (!n.saved && !sepDone && i > 0 && list[i - 1].saved) {
+        var sep = document.createElement("span"); sep.className = "sep"; tray.appendChild(sep);
+      }
+      if (!n.saved) sepDone = true;
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip" + (n.id === S.active ? " on" : "");
+      b.textContent = (n.saved ? "📌 " : "") + titleOf(n);
+      b.title = n.saved ? "Đã lưu" : "Chưa lưu";
+      b.addEventListener("click", function () { switchTo(n.id); });
+      tray.appendChild(b);
+    });
+    var add = document.createElement("button");
+    add.type = "button"; add.className = "chip new"; add.textContent = "+ Note mới";
+    add.addEventListener("click", addNote);
+    tray.appendChild(add);
+  }
+
+  function renderMeta() {
+    var n = cur();
+    keepBtn.textContent = n.saved ? "Bỏ lưu" : "Lưu";
+    keepBtn.classList.toggle("on", n.saved);
+    meta.classList.remove("warn");
+    if (n.saved) {
+      meta.textContent = "📌 Đã lưu, giữ lại mãi";
+    } else {
+      var left = Math.max(0, Math.ceil((n.updated + EXPIRE - Date.now()) / DAY));
+      meta.textContent = "Chưa lưu · tự xoá sau " + left + " ngày nếu không bấm Lưu";
+      if (left <= 3) meta.classList.add("warn");
+    }
+  }
+
+  function showView() {
+    var text = edit.value;
+    view.innerHTML = text.trim() === ""
+      ? '<span class="placeholder">Bấm vào đây để ghi chú…</span>'
+      : render(text);
+    edit.hidden = true;
+    view.hidden = false;
+  }
+  function showEdit() {
+    view.hidden = true;
+    edit.hidden = false;
+    fit();
+    edit.focus();
+    var n = edit.value.length;
+    edit.setSelectionRange(n, n);
+  }
+  function fit() {
+    edit.style.height = "auto";
+    var min = Math.round(window.innerHeight * 0.56);
+    edit.style.height = Math.max(edit.scrollHeight, min) + "px";
+  }
+
+  function loadActive() {
+    edit.value = cur().text;
+    showView();
+    renderTray();
+    renderMeta();
+  }
+
+  /* ---------- hành động ---------- */
+  function dropIfEmpty(n) {
+    if (n && !n.saved && n.text.trim() === "" && S.notes.length > 1) {
+      S.notes = S.notes.filter(function (x) { return x.id !== n.id; });
+    }
+  }
+
+  function switchTo(id) {
+    if (id === S.active) { return; }
+    var old = cur();
+    S.active = id;
+    dropIfEmpty(old);
+    persist(true);
+    loadActive();
+  }
+
+  function addNote() {
+    var old = cur();
+    if (old.text.trim() === "" && !old.saved) { loadActive(); showEdit(); return; }
+    var n = makeNote("");
+    S.notes.push(n);
+    S.active = n.id;
+    persist(true);
+    loadActive();
+    showEdit();
+  }
+
+  edit.addEventListener("input", function () {
+    var n = cur();
+    n.text = edit.value;
+    if (!n.saved) n.updated = Date.now();
+    fit();
+    persist();
+    renderTray();
+    renderMeta();
+  });
+  edit.addEventListener("blur", showView);
+  edit.addEventListener("keydown", function (e) { if (e.key === "Escape") edit.blur(); });
+  view.addEventListener("click", showEdit);
+  view.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); showEdit(); }
+  });
+
+  keepBtn.addEventListener("click", function () {
+    var n = cur();
+    n.saved = !n.saved;
+    n.updated = Date.now();
+    persist();
+    renderTray();
+    renderMeta();
+  });
+
+  delBtn.addEventListener("click", function () {
+    var n = cur();
+    if (n.text.trim() !== "" && !confirm("Xoá tờ note này? Không thể hoàn tác.")) return;
+    S.notes = S.notes.filter(function (x) { return x.id !== n.id; });
+    if (S.notes.length === 0) S.notes.push(makeNote(""));
+    S.active = sorted(S.notes)[0].id;
+    persist();
+    loadActive();
+  });
+
+  window.addEventListener("resize", function () { if (!edit.hidden) fit(); });
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) renderMeta();
+  });
+
+  /* ---------- khởi động ---------- */
+  persist(true);
+  loadActive();
+  if (cur().text.trim() === "") showEdit();
+})();
+</script>
+</body>
+</html>
